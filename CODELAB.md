@@ -2,7 +2,7 @@
 
 **Thời gian:** 2 giờ  
 **Ngôn ngữ:** Python 3.11+  
-**Công nghệ:** LangGraph, LangChain, A2A SDK
+**Công nghệ:** LangGraph, LangChain, A2A SDK, Ollama-compatible endpoint
 
 ## Mục Tiêu Học Tập
 
@@ -18,7 +18,7 @@ Sau khi hoàn thành codelab này, bạn sẽ:
 ### Yêu Cầu Hệ Thống
 - Python 3.11 trở lên
 - [uv](https://docs.astral.sh/uv/) package manager
-- API key từ [OpenRouter](https://openrouter.ai)
+- [Ollama](https://ollama.com/) hoặc một OpenAI-compatible endpoint
 
 ### Cài Đặt
 
@@ -32,7 +32,7 @@ uv sync
 
 # Cấu hình environment
 cp .env.example .env
-# Sửa file .env, thêm OPENROUTER_API_KEY của bạn
+# Sửa file .env, thêm cấu hình OLLAMA_* hoặc endpoint OpenAI-compatible của bạn
 ```
 
 ---
@@ -245,10 +245,14 @@ uv run python stages/stage_4_milti_agent/main.py
 
 Mở `stages/stage_4_milti_agent/main.py`:
 
-1. Tìm `class State(TypedDict)` — đây là shared state
-2. Tìm các agent functions: `law_agent`, `tax_agent`, `compliance_agent`
+1. Tìm `class LegalState(TypedDict)` — đây là shared state
+2. Tìm các node chính: `analyze_law`, `check_routing`, `call_tax_specialist`, `call_compliance_specialist`, `aggregate`
 3. Tìm `Send()` API — dispatch parallel tasks
-4. Xem `graph.add_node()` và `graph.add_edge()`
+4. Xem `graph.add_node()`, `graph.add_edge()`, `graph.add_conditional_edges()`
+
+**Note:** Ở stage này có 2 loại "agent":
+- **LLM node**: `analyze_law`, `check_routing`, `aggregate` gọi LLM một lần để làm một việc cố định
+- **ReAct sub-agent**: `call_tax_specialist`, `call_compliance_specialist` dùng `create_react_agent()` nên có loop `Reason -> Act -> Observe`
 
 **Bước 3:** Vẽ graph
 
@@ -343,6 +347,12 @@ Chờ ~10 giây để tất cả services khởi động.
 uv run python test_client.py
 ```
 
+Bạn cũng có thể đo latency nhiều lần:
+
+```bash
+uv run python test_client.py --runs 3
+```
+
 **Bước 3:** Quan sát logs
 
 Mở 5 terminal tabs và xem logs của từng service:
@@ -352,19 +362,44 @@ Mở 5 terminal tabs và xem logs của từng service:
 - Tax Agent: port 10102
 - Compliance Agent: port 10103
 
+**Request flow thực tế trong repo:**
+1. `test_client.py` gửi câu hỏi đến `customer_agent`
+2. `customer_agent` dùng tool `delegate_to_legal_agent` để discover `law_agent`
+3. `law_agent` chạy `analyze_law` rồi `check_routing`
+4. `law_agent` discover và delegate song song sang `tax_agent` và/hoặc `compliance_agent`
+5. `law_agent` aggregate kết quả và trả về `customer_agent`
+6. `customer_agent` trả response cuối cùng cho client
+
 **Bài Tập 5.1:** Trace request flow
 
 Trong logs, tìm `trace_id` và theo dõi request đi qua các agents. Vẽ sequence diagram.
 
+Gợi ý các log line quan trọng:
+- `CustomerAgent executing | ... trace=...`
+- `LawAgent executing | ... trace=...`
+- `TaxAgent executing | ... trace=...`
+- `ComplianceAgent executing | ... trace=...`
+- `Delegating to http://... (depth=..., trace=...)`
+
 **Bài Tập 5.2:** Test dynamic discovery
 
 1. Dừng Tax Agent (Ctrl+C)
-2. Chạy lại `test_client.py`
+2. Chạy lại `uv run python test_client.py`
 3. Quan sát lỗi và cách hệ thống xử lý
+
+Kỳ vọng với code hiện tại:
+- `law_agent` vẫn hoàn tất request
+- phần `Tax Analysis` sẽ degrade thành thông báo kiểu `[Tax analysis unavailable: ...]`
+- `compliance_agent` vẫn có thể trả kết quả nếu routing yêu cầu
 
 **Bài Tập 5.3:** Modify agent behavior
 
 Sửa `tax_agent/graph.py`, thay đổi system prompt để agent trả lời ngắn gọn hơn. Restart tax agent và test lại.
+
+**Tối ưu latency đang có trong repo:**
+- `law_agent.check_routing` có fast-path keyword routing cho các câu hỏi rõ domain
+- nếu câu hỏi đã chứa từ khóa như `tax`, `irs`, `sec`, `sox`, `gdpr` thì bỏ qua một lần gọi LLM routing
+- điều này giúp giảm một lần gọi model trong Stage 5
 
 ---
 
@@ -411,13 +446,13 @@ Tích hợp LangSmith hoặc Prometheus để monitor agent performance.
 
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [A2A Protocol Spec](https://github.com/google/A2A)
-- [OpenRouter API](https://openrouter.ai/docs)
+- [Ollama Docs](https://ollama.com/library)
 - Architecture diagrams: `docs/*.svg`
 
 ## Hỗ Trợ
 
 Nếu gặp vấn đề:
-1. Check `.env` file có đúng API key không
+1. Check `.env` file có đúng cấu hình `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_API_KEY` không
 2. Đảm bảo tất cả ports (10000-10103) không bị chiếm
 3. Xem logs trong terminal để debug
 4. Đọc error messages cẩn thận — thường có hint rõ ràng
@@ -428,5 +463,14 @@ Nếu gặp vấn đề:
 Sau khi chạy full Stage 5 (test_client.py) trả lời 2 câu hỏi:
 - Latency (Tổng thời gian trả lời 1 câu hỏi của hệ thống) là bao nhiêu giây?
 - Đề xuất phương án giảm latency và demo + show thời gian xử lý đã giảm được khi apply phương án?
+
+**Cách đo gợi ý:**
+1. Chạy baseline: `uv run python test_client.py --runs 3`
+2. Ghi lại `Average`, `Min`, `Max`
+3. Áp dụng tối ưu
+4. Chạy lại cùng câu hỏi và cùng số runs
+5. So sánh chênh lệch latency trước/sau
+
+**Mẹo:** latency phụ thuộc model, máy local, và Ollama/OpenAI-compatible endpoint nên không có một con số chuẩn cố định cho mọi máy. Hãy dùng cùng một câu hỏi benchmark để so sánh công bằng.
 
 **Chúc các bạn học tốt! 🚀**

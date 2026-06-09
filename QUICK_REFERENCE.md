@@ -9,7 +9,7 @@ uv sync
 
 # Copy environment file
 cp .env.example .env
-# Sau đó sửa .env, thêm OPENROUTER_API_KEY
+# Sau đó sửa .env, thêm OLLAMA_BASE_URL / OLLAMA_MODEL nếu cần
 ```
 
 ### Chạy Stages (Standalone)
@@ -34,6 +34,9 @@ uv run python stages/stage_4_milti_agent/main.py
 
 # Test hệ thống (terminal khác)
 uv run python test_client.py
+
+# Đo latency nhiều lần
+uv run python test_client.py --runs 3
 
 # Stop tất cả
 # Ctrl+C trong terminal chạy start_all.sh
@@ -177,15 +180,23 @@ kill -9 <PID>
 grep "trace_id" <log_output>
 ```
 
+### Stage 5 Acceptance Checklist
+- `./start_all.sh` start đủ 5 service mà không crash ngay
+- `uv run python test_client.py` trả về `RESPONSE:` thay vì timeout hoặc empty
+- `uv run python test_client.py --runs 3` in ra `LATENCY METRICS`
+- Logs của `customer_agent`, `law_agent`, `tax_agent`, `compliance_agent` có cùng `trace=...`
+- Khi tắt `tax_agent`, hệ thống vẫn trả lời và phần tax degrade thành thông báo unavailable
+
 ### Common Errors
 
 **"Could not reach Customer Agent"**
 - Chưa start services: chạy `./start_all.sh`
 - Port bị chiếm: check với `lsof -i :10100`
 
-**"API key invalid"**
-- Check `.env` file có đúng key không
-- Key phải bắt đầu bằng `sk-or-v1-...`
+**"Could not connect to Ollama / model endpoint"**
+- Check `.env` file có đúng `OLLAMA_BASE_URL` không
+- Đảm bảo Ollama hoặc OpenAI-compatible endpoint đang chạy
+- Nếu dùng Ollama local, thử `curl http://localhost:11434/v1/models`
 
 **"Module not found"**
 - Chưa cài dependencies: `uv sync`
@@ -224,6 +235,10 @@ grep "trace_id" <log_output>
 - Nhiều agents chuyên môn hóa
 - Mỗi agent có tools riêng
 - Có thể chạy song song (parallel)
+
+### LLM Node vs ReAct Agent
+- **LLM node**: một bước gọi model một lần để làm việc cố định
+- **ReAct agent**: có loop `Reason -> Act -> Observe`, tự quyết định có gọi tool tiếp hay không
 
 ### A2A Protocol
 - Chuẩn giao tiếp giữa agents
@@ -271,6 +286,20 @@ Tax Agent    Compliance Agent
        Response
 ```
 
+### Request Trace Map
+```
+test_client.py
+  → customer_agent
+    → discover("legal_question")
+    → law_agent
+      → analyze_law
+      → check_routing
+      → discover("tax_question") / discover("compliance_question")
+      → tax_agent + compliance_agent (parallel)
+      → aggregate
+  → final response
+```
+
 ---
 
 ## Ports Reference
@@ -296,7 +325,7 @@ Tax Agent    Compliance Agent
 
 - **LangGraph Docs**: https://langchain-ai.github.io/langgraph/
 - **A2A Protocol**: https://github.com/google/A2A
-- **OpenRouter**: https://openrouter.ai/docs
+- **Ollama**: https://ollama.com/library
 - **Python Type Hints**: https://docs.python.org/3/library/typing.html
 
 ---

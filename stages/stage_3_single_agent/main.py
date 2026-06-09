@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from dotenv import load_dotenv
 from langchain_core.tools import tool
+from langchain.agents import create_agent
 
 from common.llm import get_llm
 
@@ -171,46 +172,49 @@ def check_compliance_requirements(industry: str, company_size: str) -> str:
         f"  {size_note}"
     )
 
+@tool
+def search_case_law(keywords: str) -> str:
+    """Tìm kiếm án lệ theo từ khóa.
+    
+    Args:
+        keywords: Từ khóa tìm kiếm
+    """
+    cases = {
+        "breach": "Hadley v. Baxendale (1854) - Consequential damages",
+        "negligence": "Donoghue v. Stevenson (1932) - Duty of care",
+        "contract": "Carlill v. Carbolic Smoke Ball Co (1893) - Unilateral contract",
+    }
+    for key, case in cases.items():
+        if key in keywords.lower():
+            return case
+    return "Không tìm thấy án lệ phù hợp"
 
-TOOLS = [search_legal_database, calculate_penalty, check_compliance_requirements]
 
-QUESTION = (
-    "A tech startup with $5M revenue was caught sharing user data without consent "
-    "and failed to pay taxes on overseas revenue. What are all the legal consequences?"
-)
+TOOLS = [search_legal_database, calculate_penalty, check_compliance_requirements,search_case_law]
 
 SYSTEM_PROMPT = (
     "You are a legal analyst agent. You have access to tools for searching legal databases, "
     "calculating penalties, and checking compliance requirements. Use these tools to build "
     "a comprehensive analysis. Search for each legal area separately — data privacy, tax, "
     "and compliance. Keep your final answer under 500 words."
+    "Trả lời tiếng việt"
 )
 
 
 async def main():
-    from langgraph.prebuilt import create_react_agent
-
-    print("=" * 70)
-    print("STAGE 3: Single Agent (ReAct Loop)")
-    print("=" * 70)
-    print()
-    print("[How it works]")
-    print("  1. An autonomous agent receives a complex multi-part question")
-    print("  2. It reasons about what tools to call (Think)")
-    print("  3. It calls a tool (Act)")
-    print("  4. It observes the result and decides next steps (Observe)")
-    print("  5. It repeats until it has enough information for a final answer")
-    print()
-    print(f"Question: {QUESTION}")
-    print("-" * 70)
-
+    print("Nhập câu hỏi")
+    question = input()
     llm = get_llm()
-    graph = create_react_agent(model=llm, tools=TOOLS, prompt=SYSTEM_PROMPT)
+    graph = create_agent(model=llm, tools=TOOLS, system_prompt=SYSTEM_PROMPT)
 
-    inputs = {"messages": [{"role": "user", "content": QUESTION}]}
+
+    inputs = {"messages": [{"role": "user", "content": question}]}
+
+    print("graph 123",graph.astream(inputs, stream_mode="updates"))
 
     step = 0
     async for chunk in graph.astream(inputs, stream_mode="updates"):
+        print("chunk",chunk.items())
         for node_name, update in chunk.items():
             step += 1
             messages = update.get("messages", [])
@@ -228,22 +232,6 @@ async def main():
                     print(f"\n[Step {step}] FINAL ANSWER (node: {node_name})")
                     print("-" * 70)
                     print(msg.content)
-
-    print()
-    print("-" * 70)
-    print("[Improvements over Stage 2]")
-    print("  + Autonomous: agent decides which tools to call and when")
-    print("  + Multi-step reasoning: can search, calculate, search again")
-    print("  + Handles complex queries: breaks problems into sub-tasks")
-    print()
-    print("[Limitations of Stage 3]")
-    print("  - Single agent: one LLM handles all domains (law, tax, compliance)")
-    print("  - No specialisation: same system prompt for all legal areas")
-    print("  - Bottleneck: sequential tool calls, no parallelism")
-    print()
-    print("Next: Stage 4 splits this into specialised agents that work in parallel.")
-    print("=" * 70)
-
 
 if __name__ == "__main__":
     load_dotenv()

@@ -1,12 +1,3 @@
-"""Stage 4: Multi-Agent System (In-Process)
-
-Multiple specialised agents collaborate on a complex legal question.
-This mirrors Stage 5's architecture (law_agent/graph.py) but runs
-entirely in-process — no HTTP, no A2A protocol, no separate servers.
-
-Graph: analyze_law -> check_routing -> parallel [call_tax, call_compliance] -> aggregate -> END
-"""
-
 import asyncio
 import json
 import os
@@ -294,26 +285,10 @@ def create_graph():
     return graph.compile()
 
 
-QUESTION = "If a company breaks a contract and avoids taxes, what are the legal and regulatory consequences?"
+QUESTION = "Nếu một công ty vi phạm hợp đồng và trốn thuế thì hậu quả pháp lý và quy định là gì?"
 
 
 async def main():
-    print("=" * 70)
-    print("STAGE 4: Multi-Agent System (In-Process)")
-    print("=" * 70)
-    print()
-    print("[How it works]")
-    print("  1. Lead attorney agent analyses the question")
-    print("  2. Router decides which specialist agents are needed")
-    print("  3. Tax + Compliance specialists run IN PARALLEL (LangGraph Send API)")
-    print("  4. Aggregator combines all analyses into a final answer")
-    print()
-    print("[Graph topology]")
-    print("  analyze_law -> check_routing -> [call_tax + call_compliance] -> aggregate -> END")
-    print()
-    print(f"Question: {QUESTION}")
-    print("-" * 70)
-
     graph = create_graph()
 
     result = await graph.ainvoke({
@@ -330,33 +305,6 @@ async def main():
     print("FINAL ANSWER")
     print("=" * 70)
     print(result["final_answer"])
-
-    print()
-    print("-" * 70)
-    print("[Improvements over Stage 3]")
-    print("  + Specialisation: each agent has domain-specific expertise")
-    print("  + Parallel execution: tax + compliance agents run concurrently")
-    print("  + Better quality: specialist prompts produce deeper analysis")
-    print("  + Structured flow: explicit graph topology with routing logic")
-    print()
-    print("[Stage 4 (Monolith) vs Stage 5 (Distributed A2A)]")
-    print("  +---------------------------+-------------------------------+")
-    print("  | Stage 4 (In-Process)      | Stage 5 (A2A Protocol)        |")
-    print("  +---------------------------+-------------------------------+")
-    print("  | Single process            | Multiple services (ports)     |")
-    print("  | Direct function calls     | HTTP-based A2A protocol       |")
-    print("  | Shared memory             | Message passing               |")
-    print("  | Simple deployment         | Independent scaling           |")
-    print("  | Tight coupling            | Loose coupling                |")
-    print("  | Easy to debug             | Service discovery + registry  |")
-    print("  | Good for small teams      | Good for large organisations  |")
-    print("  +---------------------------+-------------------------------+")
-    print()
-    print("Stage 5 (this repo's main project) takes this same graph topology")
-    print("and deploys each agent as an independent A2A service. Run it with:")
-    print("  ./start_all.sh && python test_client.py")
-    print("=" * 70)
-
 
 if __name__ == "__main__":
     load_dotenv()

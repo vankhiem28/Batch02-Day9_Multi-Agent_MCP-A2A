@@ -37,6 +37,11 @@ uv run python exercises/exercise_2_tools.py
 uv run python exercises/exercise_4_multiagent.py
 ```
 
+**Checklist nghiệm thu nhanh:**
+- Câu hỏi mẫu có keyword về dữ liệu sẽ route vào `privacy_agent`
+- Output cuối có phần `PHÂN TÍCH QUYỀN RIÊNG TƯ`
+- Nếu câu hỏi không khớp specialist nào, graph vẫn đi tới `aggregate_results`
+
 ---
 
 ## Đáp Án

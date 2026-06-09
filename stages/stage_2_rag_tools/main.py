@@ -1,10 +1,3 @@
-"""Stage 2: LLM + RAG / Tools
-
-Adds retrieval-augmented generation and tool use to ground LLM responses
-in external data. The LLM can now search a legal knowledge base and
-calculate damages — but the orchestration is manual (one tool-call loop).
-"""
-
 import asyncio
 import os
 import sys
@@ -81,6 +74,16 @@ LEGAL_KNOWLEDGE = [
             "public interest (Winter v. Natural Resources Defense Council, 2008)."
         ),
     },
+    {
+    "id": "labor_law",
+    "keywords": ["lao động", "sa thải", "hợp đồng lao động", "labor", "termination"],
+    "text": (
+        "Theo Bộ luật Lao động Việt Nam 2019, người sử dụng lao động có thể "
+        "đơn phương chấm dứt hợp đồng trong các trường hợp: (1) người lao động "
+        "thường xuyên không hoàn thành công việc; (2) bị ốm đau, tai nạn đã điều trị "
+        "12 tháng chưa khỏi; (3) thiên tai, hỏa hoạn; (4) người lao động đủ tuổi nghỉ hưu."
+    ),
+}
 ]
 
 
@@ -134,26 +137,25 @@ def calculate_damages(breach_type: str, contract_value: float) -> str:
         f"  Total estimated exposure: ${total:,.2f}"
     )
 
+@tool
+def check_statute_of_limitations(case_type: str) -> str:
+    """Kiểm tra thời hiệu khởi kiện theo loại vụ án.
+    
+    Args:
+        case_type: Loại vụ án (contract, tort, property)
+    """
+    limits = {
+        "contract": "4 năm (UCC § 2-725)",
+        "tort": "2-3 năm tùy bang",
+        "property": "5 năm",
+    }
+    return limits.get(case_type.lower(), "Không xác định")
 
-TOOLS = [search_legal_database, calculate_damages]
+TOOLS = [search_legal_database, calculate_damages,check_statute_of_limitations]
 
-QUESTION = "What are the legal consequences if a company breaches a non-disclosure agreement?"
-
+QUESTION = "Hậu quả pháp lý nếu một công ty vi phạm thỏa thuận không tiết lộ thông tin là gì?"
 
 async def main():
-    print("=" * 70)
-    print("STAGE 2: LLM + RAG / Tools")
-    print("=" * 70)
-    print()
-    print("[How it works]")
-    print("  1. LLM receives tools (search_legal_database, calculate_damages)")
-    print("  2. LLM decides which tools to call and with what arguments")
-    print("  3. We execute the tools and feed results back to the LLM")
-    print("  4. LLM generates a final answer grounded in retrieved data")
-    print()
-    print(f"Question: {QUESTION}")
-    print("-" * 70)
-
     llm = get_llm()
     llm_with_tools = llm.bind_tools(TOOLS)
     tool_map = {t.name: t for t in TOOLS}
@@ -197,22 +199,6 @@ async def main():
     print(">>> Step 3: LLM generating final answer with tool results...\n")
     final_response = await llm_with_tools.ainvoke(messages)
     print(final_response.content)
-
-    print()
-    print("-" * 70)
-    print("[Improvements over Stage 1]")
-    print("  + Grounded: answers cite specific statutes (DTSA, UCC, etc.)")
-    print("  + Tool use: can search databases and calculate damages")
-    print("  + More accurate: retrieval reduces hallucination risk")
-    print()
-    print("[Limitations of Stage 2]")
-    print("  - Manual orchestration: we wrote the tool-call loop ourselves")
-    print("  - Single pass: only one round of tool calls")
-    print("  - No reasoning loop: LLM can't decide to search again if needed")
-    print()
-    print("Next: Stage 3 wraps this in an autonomous ReAct agent loop.")
-    print("=" * 70)
-
 
 if __name__ == "__main__":
     load_dotenv()

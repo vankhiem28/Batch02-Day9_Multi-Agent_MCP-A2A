@@ -22,6 +22,8 @@ from common.llm import get_llm
 logger = logging.getLogger(__name__)
 
 MAX_DELEGATION_DEPTH = 3
+TAX_KEYWORDS = ("tax", "irs", "fbar", "fatca", "evasion", "offshore", "thuế")
+COMPLIANCE_KEYWORDS = ("compliance", "regulation", "regulatory", "sec", "sox", "aml", "fcpa", "gdpr", "ccpa")
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +80,17 @@ async def check_routing(state: LawState) -> dict:
     if depth >= MAX_DELEGATION_DEPTH:
         logger.info("Max delegation depth reached (%d); skipping sub-agents", depth)
         return {"needs_tax": False, "needs_compliance": False}
+
+    question_lower = state["question"].lower()
+    keyword_tax = any(kw in question_lower for kw in TAX_KEYWORDS)
+    keyword_compliance = any(kw in question_lower for kw in COMPLIANCE_KEYWORDS)
+    if keyword_tax or keyword_compliance:
+        logger.info(
+            "Routing fast-path via keywords: needs_tax=%s needs_compliance=%s",
+            keyword_tax,
+            keyword_compliance,
+        )
+        return {"needs_tax": keyword_tax, "needs_compliance": keyword_compliance}
 
     llm = get_llm()
     messages = [
